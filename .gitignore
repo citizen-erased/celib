@@ -1,3 +1,7 @@
+#----------------------------
+# github's C .gitignore
+#----------------------------
+
 # Object files
 *.o
 *.ko
@@ -30,3 +34,36 @@
 
 # Debug files
 *.dSYM/
+
+#----------------------------
+# github's C++ .gitignore
+#----------------------------
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# # Precompiled Headers
+*.gch
+*.pch
+
+# # Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# # Fortran module files
+*.mod
+
+# # Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# # Executables
+*.exe
+*.out
+*.app
