@@ -3,14 +3,14 @@
   libraries. See https://github.com/nothings/stb for details.
   
   Do this:
-     #define INI_IMPLEMENTATION
+     #define CE_INI_IMPLEMENTATION
   before you include this file in *one* C or C++ file to create the implementation.
   
   // i.e. it should look like this:
   #include ...
   #include ...
   #include ...
-  #define INI_IMPLEMENTATION
+  #define CE_INI_IMPLEMENTATION
   #include "ini.h"
 */
 
@@ -19,15 +19,15 @@
  * HEADER
  *===========================================================================*/
 
-#ifndef INI_H
-#define INI_H
+#ifndef CE_INI_H
+#define CE_INI_H
 
-#define INI_MAX_SECTION_LENGTH 32
-#define INI_MAX_KEY_LENGTH     32
-#define INI_MAX_VALUE_LENGTH   64
+#define CE_INI_MAX_SECTION_LENGTH 32
+#define CE_INI_MAX_NAME_LENGTH    32
+#define CE_INI_MAX_VALUE_LENGTH   64
 
-#define INI_OK    0
-#define INI_ERROR 1
+#define CE_INI_OK    0
+#define CE_INI_ERROR 1
 
 
 /*----------------------------------------------------------------------------
@@ -37,38 +37,38 @@
 extern "C" {
 #endif
 
-typedef void (*INIParseCallback)(const char *section, const char *key, const char *value, void *data);
+typedef void (*INIParseCallback)(const char *section, const char *name, const char *value, void *data);
 
-int INI_Parse(const char *text, INIParseCallback callback, void *callback_data);
+int CE_INI_Parse(const char *text, INIParseCallback callback, void *callback_data);
 
 #ifdef __cplusplus /* extern "C" */
 }
 #endif
 
 
-#endif /* INI_H */
+#endif /* CE_INI_H */
 
 
 /*============================================================================
  * IMPLEMENTATION
  *===========================================================================*/
-#ifdef INI_IMPLEMENTATION
+#ifdef CE_INI_IMPLEMENTATION
 
 #include <string.h>
 #include <ctype.h>
 
-#ifndef INI_ASSERT
+#ifndef CE_INI_ASSERT
 #include <assert.h>
-#define INI_ASSERT(x) assert(x)
+#define CE_INI_ASSERT(x) assert(x)
 #endif
 
-#ifndef INI_NO_PRINT
+#ifndef CE_INI_NO_PRINT
 #include <stdio.h>
 #endif
 
 static const char* err(const char *msg)
 {
-#ifndef INI_NO_PRINT
+#ifndef CE_INI_NO_PRINT
     printf("%s\n", msg);
 #endif
     return NULL;
@@ -111,10 +111,10 @@ static const char* skipEquality(const char *str)
  * Section Parsing
  *---------------------------------------------------------------------------*/
 
-static const char* parseSection(const char *str, char out[INI_MAX_SECTION_LENGTH])
+static const char* parseSection(const char *str, char out[CE_INI_MAX_SECTION_LENGTH])
 {
     int n = 0;
-    memset(out, '\0', INI_MAX_SECTION_LENGTH);
+    memset(out, '\0', CE_INI_MAX_SECTION_LENGTH);
 
     if(!(*str && *(str++) == '['))
         return err("start of section not found");
@@ -124,7 +124,7 @@ static const char* parseSection(const char *str, char out[INI_MAX_SECTION_LENGTH
         if(!(isalnum(*str) || *str == '-' || *str == '_' || *str == ' '))
             return err("invalid character in section");
 
-        if(!(n < INI_MAX_SECTION_LENGTH - 1))
+        if(!(n < CE_INI_MAX_SECTION_LENGTH - 1))
             return err("section too long");
 
         out[n++] = *(str++);
@@ -137,27 +137,27 @@ static const char* parseSection(const char *str, char out[INI_MAX_SECTION_LENGTH
 }
 
 /*----------------------------------------------------------------------------
- * Key Parsing
+ * Name Parsing
  *---------------------------------------------------------------------------*/
 
-static const char* parseKey(const char *str, char out[INI_MAX_KEY_LENGTH])
+static const char* parseName(const char *str, char out[CE_INI_MAX_NAME_LENGTH])
 {
     int n = 0;
-    memset(out, '\0', INI_MAX_KEY_LENGTH);
+    memset(out, '\0', CE_INI_MAX_NAME_LENGTH);
 
     while(*str && *str != ' ' && *str != '=')
     {
         if(!(isalnum(*str) || *str == '.' || *str == '-' || *str == '_'))
-            return err("invalid character in key");
+            return err("invalid character in name");
 
-        if(!(n < INI_MAX_KEY_LENGTH - 1))
-            return err("key too long");
+        if(!(n < CE_INI_MAX_NAME_LENGTH - 1))
+            return err("name too long");
             
         out[n++] = *(str++);
     }
 
     if(n == 0)
-        return err("key too short");
+        return err("name too short");
 
     return str;
 }
@@ -166,17 +166,17 @@ static const char* parseKey(const char *str, char out[INI_MAX_KEY_LENGTH])
  * Value Parsing
  *---------------------------------------------------------------------------*/
 
-static const char* parseUnquotedValue(const char *str, char out[INI_MAX_VALUE_LENGTH])
+static const char* parseUnquotedValue(const char *str, char out[CE_INI_MAX_VALUE_LENGTH])
 {
     int n = 0;
-    memset(out, '\0', INI_MAX_VALUE_LENGTH);
+    memset(out, '\0', CE_INI_MAX_VALUE_LENGTH);
 
     while(*str && (*str != '\n' && *str != '\r') && *str != ';')
     {
         if(!(isprint(*str) || *str == '\t'))
             return err("invalid character in value");
 
-        if(!(n < INI_MAX_VALUE_LENGTH - 1))
+        if(!(n < CE_INI_MAX_VALUE_LENGTH - 1))
             return err("value too long or too many trailing spaces");
 
         out[n++] = *(str++);
@@ -188,10 +188,10 @@ static const char* parseUnquotedValue(const char *str, char out[INI_MAX_VALUE_LE
     return str;
 }
 
-static const char* parseQuotedValue(const char *str, char out[INI_MAX_VALUE_LENGTH])
+static const char* parseQuotedValue(const char *str, char out[CE_INI_MAX_VALUE_LENGTH])
 {
     int n = 0;
-    memset(out, '\0', INI_MAX_VALUE_LENGTH);
+    memset(out, '\0', CE_INI_MAX_VALUE_LENGTH);
 
     if(*str && *(str++) != '"')
         return err("starting quote not found");
@@ -220,7 +220,7 @@ static const char* parseQuotedValue(const char *str, char out[INI_MAX_VALUE_LENG
             c = *(str++);
         }
 
-        if(!(n < INI_MAX_VALUE_LENGTH - 1))
+        if(!(n < CE_INI_MAX_VALUE_LENGTH - 1))
             return err("value too long or too many trailing spaces");
 
         out[n++] = c;
@@ -232,7 +232,7 @@ static const char* parseQuotedValue(const char *str, char out[INI_MAX_VALUE_LENG
     return str;
 }
 
-static const char* parseValue(const char *str, char out[INI_MAX_VALUE_LENGTH])
+static const char* parseValue(const char *str, char out[CE_INI_MAX_VALUE_LENGTH])
 {
     return (*str == '\"') ? parseQuotedValue(str, out) : parseUnquotedValue(str, out);
 }
@@ -241,47 +241,47 @@ static const char* parseValue(const char *str, char out[INI_MAX_VALUE_LENGTH])
  * INI Parsing
  *---------------------------------------------------------------------------*/
 
-int INI_Parse(const char *text, INIParseCallback callback, void *callback_data)
+int CE_INI_Parse(const char *text, INIParseCallback callback, void *callback_data)
 {
-    INI_ASSERT(callback != NULL);
+    CE_INI_ASSERT(callback != NULL);
 
-    char section[INI_MAX_SECTION_LENGTH];
-    char key[INI_MAX_KEY_LENGTH];
-    char value[INI_MAX_VALUE_LENGTH];
+    char section[CE_INI_MAX_SECTION_LENGTH];
+    char name[CE_INI_MAX_NAME_LENGTH];
+    char value[CE_INI_MAX_VALUE_LENGTH];
     const char *str = text;
 
     while(str != NULL && *str)
     {
         if(!(str = skipToFirstReadableChar(str)))
-            return INI_ERROR;
+            return CE_INI_ERROR;
 
         if(*str == '[')
         {
             if(!(str = parseSection(str, section)))
-                return INI_ERROR;
+                return CE_INI_ERROR;
         }
         else if(*str == ';')
         {
             if(!(str = nextLine(str)))
-                return INI_ERROR;
+                return CE_INI_ERROR;
         }
         else if(*str)
         {
-            if(!(str = parseKey(str, key)))
-                return INI_ERROR;
+            if(!(str = parseName(str, name)))
+                return CE_INI_ERROR;
 
             if(!(str = skipEquality(str)))
-                return INI_ERROR;
+                return CE_INI_ERROR;
 
             if(!(str = parseValue(str, value)))
-                return INI_ERROR;
+                return CE_INI_ERROR;
 
-            (*callback)(section, key, value, callback_data);
+            (*callback)(section, name, value, callback_data);
         }
     }
 
-    return INI_OK;
+    return CE_INI_OK;
 }
 
-#endif /* INI_IMPLEMENTATION */
+#endif /* CE_INI_IMPLEMENTATION */
 
