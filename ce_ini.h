@@ -26,6 +26,8 @@
 #define CE_INI_MAX_NAME_LENGTH    32
 #define CE_INI_MAX_VALUE_LENGTH   64
 
+#define CE_INI_MAX_WRITE_OPTIONS 256
+
 #define CE_INI_OK    0
 #define CE_INI_ERROR 1
 
@@ -37,9 +39,11 @@
 extern "C" {
 #endif
 
-typedef void (*INIParseCallback)(const char *section, const char *name, const char *value, void *data);
+typedef void (*INIReadCallback)(const char *section, const char *name, const char *value, void *userdata);
+typedef void (*INIWriteCallback)(int index, char section[CE_INI_MAX_SECTION_LENGTH], char name[CE_INI_MAX_NAME_LENGTH], char value[CE_INI_MAX_VALUE_LENGTH], void *userdata);
 
-int CE_INI_Parse(const char *text, INIParseCallback callback, void *callback_data);
+int CE_INI_Read(const char *text, INIReadCallback callback, void *userdata);
+int CE_INI_Write(char *buffer, int max_length, int option_count, INIWriteCallback callback, void *userdata);
 
 #ifdef __cplusplus /* extern "C" */
 }
@@ -66,6 +70,11 @@ int CE_INI_Parse(const char *text, INIParseCallback callback, void *callback_dat
 #include <stdio.h>
 #endif
 
+
+/*----------------------------------------------------------------------------
+ * Errors
+ *---------------------------------------------------------------------------*/
+
 static const char* err(const char *msg)
 {
 #ifndef CE_INI_NO_PRINT
@@ -73,6 +82,18 @@ static const char* err(const char *msg)
 #endif
     return NULL;
 }
+
+static int err_i(const char *msg, int result)
+{
+#ifndef CE_INI_NO_PRINT
+    printf("%s\n", msg);
+#endif
+    return result;
+}
+
+/*----------------------------------------------------------------------------
+ * String Skipping
+ *---------------------------------------------------------------------------*/
 
 static const char* skipWhitespace(const char *str)
 {
@@ -241,7 +262,7 @@ static const char* parseValue(const char *str, char out[CE_INI_MAX_VALUE_LENGTH]
  * INI Parsing
  *---------------------------------------------------------------------------*/
 
-int CE_INI_Parse(const char *text, INIParseCallback callback, void *callback_data)
+int CE_INI_Read(const char *text, INIReadCallback callback, void *userdata)
 {
     CE_INI_ASSERT(callback != NULL);
 
@@ -276,9 +297,103 @@ int CE_INI_Parse(const char *text, INIParseCallback callback, void *callback_dat
             if(!(str = parseValue(str, value)))
                 return CE_INI_ERROR;
 
-            (*callback)(section, name, value, callback_data);
+            (*callback)(section, name, value, userdata);
         }
     }
+
+    return CE_INI_OK;
+}
+
+/*----------------------------------------------------------------------------
+ * INI Writing
+ *---------------------------------------------------------------------------*/
+
+static int  getWritten(int index, char *written) { return (written[index / 8] >> (index % 8)) & 0x1;   }
+static void setWritten(int index, char *written) {         written[index / 8] |= (0x1 << (index % 8)); }
+
+static int bufferPrint(char *buffer, int length, int *bytes_written, const char *str)
+{
+    int index = *bytes_written;
+
+    while(*str)
+    {
+        if(index < length - 1)
+            buffer[index++] = *(str++);
+        else
+            return err_i("write buffer full\n", CE_INI_ERROR);
+    }
+
+    buffer[index + 1] = '\0';
+    *bytes_written = index;
+
+    return CE_INI_OK;
+}
+
+int CE_INI_Write(char *buffer, int max_length, int option_count, INIWriteCallback callback, void *userdata)
+{
+    char write_section[CE_INI_MAX_SECTION_LENGTH];
+    char section[CE_INI_MAX_SECTION_LENGTH];
+    char name[CE_INI_MAX_NAME_LENGTH];
+    char value[CE_INI_MAX_VALUE_LENGTH];
+    char written[CE_INI_MAX_WRITE_OPTIONS / 8] = {0};
+    int  bytes_written = 0;
+    int  num_written = 0;
+
+    CE_INI_ASSERT(callback != NULL);
+
+    if(option_count > CE_INI_MAX_WRITE_OPTIONS)
+        return err_i("too many write options", CE_INI_ERROR);
+
+    do
+    {
+        num_written = 0;
+        int section_found = 0;
+
+        for(int i = 0; i < option_count && !section_found; i++)
+        {
+            if(getWritten(i, written) == 0)
+            {
+                (*callback)(i, write_section, name, value, userdata);
+                section_found = 1;
+            }
+        }
+
+        if(section_found)
+        {
+            if(bufferPrint(buffer, max_length, &bytes_written, "[")           == CE_INI_ERROR ||
+               bufferPrint(buffer, max_length, &bytes_written, write_section) == CE_INI_ERROR ||
+               bufferPrint(buffer, max_length, &bytes_written, "]\n")         == CE_INI_ERROR)
+            {
+                return err_i("failed to write section\n", CE_INI_ERROR);
+            }
+        }
+
+        for(int i = 0; i < option_count; i++)
+        {
+            if(getWritten(i, written) == 1)
+                continue;
+
+            (*callback)(i, section, name, value, userdata);
+
+            if(strcmp(section, write_section) != 0)
+                continue;
+
+            if(bufferPrint(buffer, max_length, &bytes_written, name)    == CE_INI_ERROR ||
+               bufferPrint(buffer, max_length, &bytes_written, "=")     == CE_INI_ERROR ||
+               bufferPrint(buffer, max_length, &bytes_written, value)   == CE_INI_ERROR ||
+               bufferPrint(buffer, max_length, &bytes_written, "\n")    == CE_INI_ERROR)
+            {
+                return err_i("failed to write name value pair\n", CE_INI_ERROR);
+            }
+
+            setWritten(i, written);
+            num_written++;
+        }
+
+        if(bufferPrint(buffer, max_length, &bytes_written, "\n") == CE_INI_ERROR)
+            return err_i("failed to write\n", CE_INI_ERROR);
+    }
+    while(num_written > 0);
 
     return CE_INI_OK;
 }
